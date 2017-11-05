@@ -13,6 +13,9 @@ Hangman game
 
  * You have 6 trials only.
 
+ * Score is calculated based on the number of trials you used multiply 10.
+ 
+
 
 INSTALLATION
 ------------
