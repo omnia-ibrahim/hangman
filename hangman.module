@@ -55,7 +55,7 @@ function hangman_menu() {
 }
 
 /**
- *
+ * Menu callback page.
  */
 function hangman_page_callback() {
   global $user;
@@ -64,31 +64,52 @@ function hangman_page_callback() {
 
     $top_score = hangman_get_top_score();
     $output .= "<p> Instructions: Word is generated random, pick letters to guess the word, you have only 7 letters for trials before Game over. </p>";
+
+    $image_array = array(
+      'path' =>drupal_get_path('module', 'hangman') . '/assets/images/hangman.png',
+      'alt' => 'Hangman',
+      'title' => 'Hangman',
+
+   'attributes' => array(),
+);
+
+
+    $output .= theme_image($image_array);
     if (!empty($top_score)) {
       $scored_user = user_load($top_score['uid']);
       $output .= "<br /> Top Score: " . $top_score['score'] . ", by: " . l($scored_user->name, 'user/' . $scored_user->uid) . "<br />";
     }
-    $get_word = db_select('words', 'w')
-     ->fields('w', array('word'))
-     ->range(0,1)    // Limit the result set by 1 record only
-     ->orderRandom() // Sort by random
-     ->execute()
-     ->fetchAssoc();
-    $dashed = hangman_word_to_dashes($get_word['word']);
- 
-    if (isset($get_word['word'])) {
-      $word = $get_word['word'];
-    }
-if (hangman_game_logic($word) == '') {  
-    foreach(range('a','z') as $letter) {
-      $output.= l($letter, "hangman/play/", array('query' => array('guess' => $letter))) . ' ';
-    }
-}
-else {
-   $output .= hangman_game_logic($word);
-}
 
-   $output .= "<br />" . l(t('New Game'), "hangman/play/", array('query' => array('newgame' => TRUE)));
+    if (!isset($_COOKIE["hangman_word"])) {
+      $get_word = db_select('words', 'w')
+       ->fields('w', array('word'))
+       ->range(0,1)    // Limit the result set by 1 record only.
+       ->orderRandom() // Sort by random.
+       ->execute()
+       ->fetchAssoc();
+      if (isset($get_word['word'])) {
+        $word = $get_word['word'];
+      } 
+      else {
+        $word = variable_get('hangman_default_value', 'hangman');
+      }
+    }
+    else {
+      $word = $_COOKIE["hangman_word"];
+    }
+    $dashed = hangman_word_to_dashes($word);
+ 
+    if (!isset($_COOKIE["hangman_available"]) || isset($_GET["newgame"])) {
+      foreach(range('a','z') as $letter) {
+        $output.= l($letter, "hangman/play/", array('query' => array('guess' => $letter))) . ' ';
+      }
+      $output .= hangman_game_logic($word);
+    }
+    else {
+      $output .= hangman_game_logic($word);
+    }
+
+    $output .= "<br />" . l(t('New Game'), "hangman/play/", array('query' => array('newgame' => TRUE)));
     return $output;
   }
   else {
@@ -142,11 +163,11 @@ function hangman_form_submit($form, $form_state) {
       'uid' => $user->uid,
       'word' => $form_state['values']['word'],       
     ))->execute();
-    drupal_set_message("Successfully saved word."); 
+  drupal_set_message("Successfully saved word."); 
 }
 
 /**
- *
+ * Helper function to convert words to dashes.
  */
 function hangman_word_to_dashes($word) {
   $wordlength = strlen($word);
@@ -171,99 +192,109 @@ function hangman_get_top_score() {
 }
 
 /**
- *
+ * Function that do all the game logic.
  */
 function hangman_game_logic($word) {
   global $user;
   $output = '';
-  $guesses  = TRIALS;                   # number of guesses the player has left
-  $available = "abcdefghijklmnopqrstuvwxyz";   # letters available to be guessed
+ 
+  //number of guesses the player has left.
+  $guesses  = TRIALS;
+ 
+  //letters available to be guessed.
+  $available = "abcdefghijklmnopqrstuvwxyz";
 
-if (!isset($dashed)) {
-         $dashed = hangman_word_to_dashes($word);
-}
-if (isset($_COOKIE["LAB5_SOLUTION_available"]) ) {
+  if (!isset($dashed)) {
+    $dashed = hangman_word_to_dashes($word);
+  }
+  if (isset($_COOKIE["hangman_available"]) && !isset($_GET["newgame"])) {
+    $str = $_COOKIE["hangman_available"];
+    $strlen = strlen( $str );
+    for( $i = 0; $i <= $strlen; $i++ ) {
+      $letter = substr( $str, $i, 1 );
+      if (isset($_GET['guess']) && ($letter != $_GET['guess'])) {
+        $output .= l($letter, "hangman/play/", array('query' => array('guess' => $letter))) . ' ';
+      }
+    } 
+  }
 
-$str = $_COOKIE["LAB5_SOLUTION_available"];
-$strlen = strlen( $str );
-for( $i = 0; $i <= $strlen; $i++ ) {
-    $letter = substr( $str, $i, 1 );
-    $output .= l($letter, "hangman/play/", array('query' => array('guess' => $letter))) . ' ';
-   
+  if (isset($_COOKIE["hangman_word"]) && !isset($_GET["newgame"])) {
+    //read previously chosen word from cookie
+    $word = $_COOKIE["hangman_word"];
+    $available = $_COOKIE["hangman_available"];
+    $guesses = $_COOKIE["hangman_guesses"];
+    if (isset($_COOKIE["hangman_dashed"])) {
+      $dashed = $_COOKIE["hangman_dashed"]; 
+    }
+    else {
+      $dashed = hangman_word_to_dashes($word);
+    }
+
+  } else {
+     setcookie("hangman_word", $word);
+     setcookie("hangman_available", $available);
+     setcookie("hangman_guesses", $guesses);
+     setcookie("hangman_dashed", $dashed);
+  }
+
+  if (isset($_GET["guess"]) && $guesses > 0) {
+    $guess = $_GET["guess"];
+    if (preg_match("/$guess/", $available)) {
+      //not already guessed before; make the guess
+      $available = preg_replace("/$guess/", " ", $available);
+      setcookie("hangman_available", $available);
+      if (!preg_match("/$guess/", $word)) {
+        //an incorrect guess
+        $guesses--;
+	setcookie("hangman_guesses", $guesses);
+      }
+      else {
+        $found = _hangman_char_positions_in_word($_GET["guess"], $word);
+        foreach ($found as $pos) {
+          $dashed[$pos-1] = $guess;
+	  setcookie("hangman_dashed", $dashed);
+        }
+      }
+    }
+  }
+
+  $output .= "<br />" . t('Play') . ": " . $dashed;
+  if ($dashed == $word) {
+    $value = TRIALS - $guesses;
+    if ($value == 0) {
+      $score = 10;
+    }
+    else {
+      $score = $value * 10;
+    }
+    db_merge('score')
+     ->key(array('uid' => $user->uid))
+     ->fields(array(
+       'uid' => $user->uid,
+       'score' => $score,
+
+     ))
+     ->execute();
+     $output .= "<br />" . t('Congratulations! You WON!');
+     hangman_reset_game('Congratulations! You WON!');
+  }
+
+  if ($guesses == 0 && ($dashed != $word)) {
+    $output .= "<br />" . t('Game Over! You Lost');
+    hangman_reset_game('Game Over! You Lost');
   } 
-
-}
-
- # we name our cookies with LAB5_SOLUTION_ prefix so that they don't mix up with your own...
-
-  if (isset($_COOKIE["LAB5_SOLUTION_word"]) && !isset($_GET["newgame"])) {
-	$word = $_COOKIE["LAB5_SOLUTION_word"];    # read previously chosen word from cookie
-	$available = $_COOKIE["LAB5_SOLUTION_available"];
-	$guesses = $_COOKIE["LAB5_SOLUTION_guesses"];
-      //  $dashed = hangman_word_to_dashes($word);
-       if (isset($_COOKIE["LAB5_SOLUTION_dashed"])) {
-         $dashed = $_COOKIE["LAB5_SOLUTION_dashed"]; 
-       }
-       else {
-         $dashed = hangman_word_to_dashes($word);
-       }
-
- } else {
-
-	setcookie("LAB5_SOLUTION_word", $word);
-	setcookie("LAB5_SOLUTION_available", $available);
-	setcookie("LAB5_SOLUTION_guesses", $guesses);
-	setcookie("LAB5_SOLUTION_dashed", $dashed);
-}
-
-if (isset($_GET["guess"]) && $guesses > 0) {   # user wants to guess a letter
-	$guess = $_GET["guess"];
-	if (preg_match("/$guess/", $available)) {
-		# not already guessed before; make the guess
-		$available = preg_replace("/$guess/", " ", $available);
-		setcookie("LAB5_SOLUTION_available", $available);
-		
-		if (!preg_match("/$guess/", $word)) {   # an incorrect guess
-			$guesses--;
-			setcookie("LAB5_SOLUTION_guesses", $guesses);
-		}
-                else {
-                  $found = _hangman_char_positions_in_word($_GET["guess"], $word);
-                  foreach ($found as $pos) {
-                     $dashed[$pos-1] = $guess;
-	             setcookie("LAB5_SOLUTION_dashed", $dashed);
-                  }
-                }
-	}
-}
-
-
-    $output .= "<br /> Play: " . $dashed;
-if ($dashed == $word) {
-   $output .= "<br />" . t('Congratulations! You WON!');
- print_r("user: " . $user->uid);
- db_merge('score')
-  ->key(array('uid' => $user->uid))
-  ->fields(array(
-      'uid' => $user->uid,
-      'score' => (TRIALS - $guesses) * 10,
-  ))
-  ->execute();
-}
-
-if ($guesses == 0 && ($dashed != $word)) {
-   $output .= "<br />" . t('Game Over! You Lost');
-
-} 
- //   $output .=  "<br /> Play: " . $_COOKIE["LAB5_SOLUTION_dashed"];
-return $output;
+  
+  if (isset($_GET['newgame'])) {
+    hangman_reset_game('Game is resetted.');
+  }
+  return $output;
 }
 
 /**
- * Find all positions of a char in a given word
+ * Find all positions of a char in a given word.
  *
- * @param string $char One char to find in the word
- * @param string $word The word to guess
+ * @param string $char One char to find in the word.
+ * @param string $word The word to guess.
  */
 function _hangman_char_positions_in_word($char, $word) {
   $found = array();
@@ -274,3 +305,37 @@ function _hangman_char_positions_in_word($char, $word) {
   }
   return $found;
 }
+
+/**
+ * Function to reset the game.
+ *
+ * @param string $message Message to display.
+ */
+function hangman_reset_game($message) {
+
+  unset($_COOKIE["hangman_word"]);
+  setcookie('hangman_word', '', time() - 3600, '/');
+  unset($_COOKIE["hangman_available"]);
+  setcookie('hangman_available', '', time() - 3600, '/');
+  unset($_COOKIE["hangman_guesses"]);
+  setcookie('hangman_guesses', '', time() - 3600, '/');
+  unset($_COOKIE["hangman_dashed"]);
+  setcookie('hangman_dashed', '', time() - 3600, '/');
+
+  $get_word = db_select('words', 'w')
+       ->fields('w', array('word'))
+       ->range(0,1)    // Limit the result set by 1 record only
+       ->orderRandom() // Sort by random
+       ->execute()
+       ->fetchAssoc();
+
+  if (isset($get_word['word'])) {
+    $word = $get_word['word'];
+  } 
+  else {
+    $word = variable_get('hangman_default_value', 'hangman');
+  }
+  setcookie('hangman_word', $word);
+  drupal_set_message($message);
+}
+
