@@ -11,7 +11,7 @@ Hangman game
 
  * You have to be loggin to start using the game.
 
- * You have 6 trials only.
+ * You have 5 trials only.
 
  * Score is calculated based on the number of trials you used multiply 10.
  

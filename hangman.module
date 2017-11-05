@@ -7,7 +7,7 @@
 /**
  * Number of trials.
  */
-define('TRIALS', 6);
+define('TRIALS', 5);
 
 /**
  * Implements hook_help().
