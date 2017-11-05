@@ -1,0 +1,78 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the hangman module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function hangman_install() {
+  variable_set('hangman_default_value', 'hangman');
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function hangman_uninstall() {
+  variable_del('hangman_default_value');
+ 
+  // Delete menu links.
+  db_delete('menu_links')
+    ->condition('module', 'hangman')
+    ->execute();
+  menu_cache_clear_all();
+}
+
+/**
+ *
+ */
+function hangman_schema() {
+  $schema['words'] = array(
+    'description' => 'The base table for hangman words',
+    'fields' => array(
+      'wid' => array(
+        'description' => 'The primary identifier for a word.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE
+      ),
+      'uid' => array(
+        'description' => 'The current user uid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'word' => array(
+        'description' => 'The hangman word.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''
+      ),   
+    ),  
+    'primary key' => array('wid'),
+  );
+  $schema['score'] = array(
+    'description' => 'The score table for hangman players',
+    'fields' => array(
+      'uid' => array(
+        'description' => 'The current user uid.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'score' => array(
+        'description' => 'The user score.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0
+      ),
+    ),
+   'primary key' => array('uid'),  
+  );
+  return $schema;
+}
+
